@@ -1,0 +1,67 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+contract P2PLending {
+    struct LoanRequest {
+        address borrower;
+        uint256 amount;
+        uint256 interest;
+        uint256 duration;
+        bool funded;
+        bool repaid;
+        address lender;
+    }
+
+    uint256 public loanCounter;
+    mapping(uint256 => LoanRequest) public loans;
+
+    event LoanRequested(uint256 loanId, address borrower, uint256 amount);
+    event LoanFunded(uint256 loanId, address lender);
+    event LoanRepaid(uint256 loanId, address borrower);
+
+    /// @notice Create a new loan request
+    function requestLoan(uint256 _amount, uint256 _interest, uint256 _duration) external {
+        loanCounter++;
+        loans[loanCounter] = LoanRequest(
+            msg.sender,
+            _amount,
+            _interest,
+            _duration,
+            false,
+            false,
+            address(0)
+        );
+        emit LoanRequested(loanCounter, msg.sender, _amount);
+    }
+
+    /// @notice Lender funds a loan request
+    function fundLoan(uint256 _loanId) external payable {
+        LoanRequest storage loan = loans[_loanId];
+        require(!loan.funded, "Loan already funded");
+        require(msg.value == loan.amount, "Incorrect funding amount");
+
+        loan.funded = true;
+        loan.lender = msg.sender;
+
+        payable(loan.borrower).transfer(msg.value);
+
+        emit LoanFunded(_loanId, msg.sender);
+    }
+
+    /// @notice Borrower repays the loan
+    function repayLoan(uint256 _loanId) external payable {
+        LoanRequest storage loan = loans[_loanId];
+        require(loan.funded, "Loan not funded");
+        require(!loan.repaid, "Loan already repaid");
+        require(msg.sender == loan.borrower, "Only borrower can repay");
+
+        uint256 totalDue = loan.amount + loan.interest;
+        require(msg.value == totalDue, "Incorrect repayment amount");
+
+        loan.repaid = true;
+
+        payable(loan.lender).transfer(msg.value);
+
+        emit LoanRepaid(_loanId, msg.sender);
+    }
+}
